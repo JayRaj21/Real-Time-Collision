@@ -95,6 +95,7 @@ try:
     from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer
     from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
     from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+    from transformers.video_processing_utils import BaseVideoProcessor
 except ImportError as e:
     sys.exit(
         f"[ERROR] transformers import failed: {e}\n"
@@ -192,9 +193,14 @@ def load_qwen() -> Tuple["Qwen2_5_VLForConditionalGeneration", "Qwen2_5_VLProces
     print(f"[init] Loading {MODEL_ID} on device={DEVICE}, dtype={DTYPE} ...")
     image_processor = Qwen2VLImageProcessor.from_pretrained(MODEL_ID)
     tokenizer       = AutoTokenizer.from_pretrained(MODEL_ID)
+    # A no-op video processor stub is required to satisfy the type check in
+    # Qwen2_5_VLProcessor.__init__; we never call it since we only pass images.
+    class _NoOpVideoProcessor(BaseVideoProcessor):
+        def __call__(self, *a, **kw): return {}
     processor       = Qwen2_5_VLProcessor(
         image_processor=image_processor,
         tokenizer=tokenizer,
+        video_processor=_NoOpVideoProcessor(),
     )
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         MODEL_ID,
