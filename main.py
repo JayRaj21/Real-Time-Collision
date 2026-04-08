@@ -205,8 +205,7 @@ def load_qwen() -> Tuple["Qwen2_5_VLForConditionalGeneration", "Qwen2_5_VLProces
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         MODEL_ID,
         torch_dtype=DTYPE,
-        device_map=DEVICE,
-    )
+    ).to(DEVICE)
     model.eval()
     return model, processor
 
