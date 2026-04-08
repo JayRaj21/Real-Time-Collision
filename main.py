@@ -37,15 +37,21 @@ import torch
 # Qwen2VLImageProcessor imports torchvision.transforms.v2.functional only for
 # the InterpolationMode type hint.  No pre-built torchvision wheel exists for
 # JetPack 6.1 aarch64, so we provide a minimal stub that satisfies the import.
-import types as _types, enum as _enum
+import types as _types, enum as _enum, importlib.machinery as _imm
 if "torchvision" not in sys.modules:
+    def _make_mod(name):
+        m = _types.ModuleType(name)
+        m.__spec__ = _imm.ModuleSpec(name, None)
+        m.__loader__ = None
+        m.__package__ = name.rsplit(".", 1)[0]
+        return m
     class _InterpolationMode(_enum.Enum):
         NEAREST = 0; BILINEAR = 2; BICUBIC = 3
-    _tvF = _types.ModuleType("torchvision.transforms.v2.functional")
+    _tvF = _make_mod("torchvision.transforms.v2.functional")
     _tvF.InterpolationMode = _InterpolationMode
-    _tv   = _types.ModuleType("torchvision")
-    _tv2  = _types.ModuleType("torchvision.transforms")
-    _tv2v = _types.ModuleType("torchvision.transforms.v2")
+    _tv   = _make_mod("torchvision")
+    _tv2  = _make_mod("torchvision.transforms")
+    _tv2v = _make_mod("torchvision.transforms.v2")
     _tv2v.functional = _tvF
     _tv2.v2 = _tv2v
     _tv.transforms = _tv2
