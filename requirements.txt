@@ -25,10 +25,9 @@
 #    pip install -r requirements.txt
 # =============================================================================
 
-# Vision-Language Model (Florence-2) and HuggingFace tooling
-transformers>=4.41.0
-timm>=0.9.0          # Florence-2 vision encoder (DaViT) dependency
-einops>=0.7.0        # required by Florence-2 custom modelling code
+# Vision-Language Model (Qwen2.5-VL) and HuggingFace tooling
+transformers>=5.0.0
+qwen-vl-utils>=0.0.8  # Qwen2.5-VL image/video preprocessing utilities
 
 # Image bridge between OpenCV (NumPy) and Tkinter (PhotoImage)
 Pillow>=10.0.0
