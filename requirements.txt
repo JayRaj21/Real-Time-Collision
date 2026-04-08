@@ -1,5 +1,6 @@
 # =============================================================================
 # requirements.txt — Jetson Orin Nano (JetPack 5.x / 6.x · L4T aarch64)
+#                    v2 — Florence-2 VLM edition
 # =============================================================================
 #
 # IMPORTANT — READ BEFORE pip install -r requirements.txt
@@ -16,17 +17,23 @@
 #    will break the CSI camera pipeline.
 #    Install via: sudo apt install python3-opencv
 #
+# 3. Florence-2  ──  Requires trust_remote_code=True (custom modelling code
+#    is downloaded from HuggingFace Hub on first run, ~900 MB total).
+#    First-run download requires an internet connection.
+#
 # Install everything else with:
 #    pip install -r requirements.txt
 # =============================================================================
 
-# Object-detection framework — downloads yolov8n.pt on first run (~6 MB)
-ultralytics>=8.2.0
+# Vision-Language Model (Florence-2) and HuggingFace tooling
+transformers>=4.41.0
+timm>=0.9.0          # Florence-2 vision encoder (DaViT) dependency
+einops>=0.7.0        # required by Florence-2 custom modelling code
 
 # Image bridge between OpenCV (NumPy) and Tkinter (PhotoImage)
 Pillow>=10.0.0
 
-# NumPy — pulled in by ultralytics; pinned to avoid ABI mismatches
+# NumPy — pinned to avoid ABI mismatches with Jetson PyTorch wheel
 numpy>=1.24.0,<2.0.0
 
 # =============================================================================
