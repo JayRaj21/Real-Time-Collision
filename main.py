@@ -34,7 +34,9 @@ import tkinter as tk
 import torch
 
 try:
-    from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+    from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer
+    from transformers.models.qwen2_5_vl import Qwen2_5_VLImageProcessor
+    from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 except ImportError:
     sys.exit(
         "[ERROR] transformers is not installed or too old.\n"
@@ -120,13 +122,22 @@ def find_collisions(dets: List[Detection]) -> List[Tuple[int, int]]:
 
 # ── Qwen2.5-VL inference helpers ──────────────────────────────────────────────
 
-def load_qwen() -> Tuple["Qwen2_5_VLForConditionalGeneration", "AutoProcessor"]:
+def load_qwen() -> Tuple["Qwen2_5_VLForConditionalGeneration", "Qwen2_5_VLProcessor"]:
     """
     Download (first run, ~6 GB) and load Qwen2.5-VL-3B-Instruct onto DEVICE.
     Subsequent runs load from ~/.cache/huggingface/hub/.
+
+    The processor is built manually (image + tokenizer only) to avoid the
+    Qwen2VLVideoProcessor dependency on torchvision, which has no pre-built
+    Jetson wheel.  Since we only pass still images this is fully equivalent.
     """
     print(f"[init] Loading {MODEL_ID} on device={DEVICE}, dtype={DTYPE} ...")
-    processor = AutoProcessor.from_pretrained(MODEL_ID)
+    image_processor = Qwen2_5_VLImageProcessor.from_pretrained(MODEL_ID)
+    tokenizer       = AutoTokenizer.from_pretrained(MODEL_ID)
+    processor       = Qwen2_5_VLProcessor(
+        image_processor=image_processor,
+        tokenizer=tokenizer,
+    )
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         MODEL_ID,
         torch_dtype=DTYPE,
