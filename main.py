@@ -46,7 +46,9 @@ if "torchvision" not in sys.modules:
         m.__package__ = name.rsplit(".", 1)[0]
         return m
     class _InterpolationMode(_enum.Enum):
-        NEAREST = 0; BILINEAR = 2; BICUBIC = 3
+        NEAREST = 0; NEAREST_EXACT = 8
+        BILINEAR = 2; BICUBIC = 3
+        BOX = 4; HAMMING = 5; LANCZOS = 1
     _tvF = _make_mod("torchvision.transforms.v2.functional")
     _tvF.InterpolationMode = _InterpolationMode
     _tv   = _make_mod("torchvision")
