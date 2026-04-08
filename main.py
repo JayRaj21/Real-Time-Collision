@@ -33,13 +33,36 @@ from PIL import Image, ImageTk
 import tkinter as tk
 import torch
 
+# ── Torchvision stub ──────────────────────────────────────────────────────────
+# Qwen2VLImageProcessor imports torchvision.transforms.v2.functional only for
+# the InterpolationMode type hint.  No pre-built torchvision wheel exists for
+# JetPack 6.1 aarch64, so we provide a minimal stub that satisfies the import.
+import types as _types, enum as _enum
+if "torchvision" not in sys.modules:
+    class _InterpolationMode(_enum.Enum):
+        NEAREST = 0; BILINEAR = 2; BICUBIC = 3
+    _tvF = _types.ModuleType("torchvision.transforms.v2.functional")
+    _tvF.InterpolationMode = _InterpolationMode
+    _tv   = _types.ModuleType("torchvision")
+    _tv2  = _types.ModuleType("torchvision.transforms")
+    _tv2v = _types.ModuleType("torchvision.transforms.v2")
+    _tv2v.functional = _tvF
+    _tv2.v2 = _tv2v
+    _tv.transforms = _tv2
+    sys.modules.update({
+        "torchvision": _tv,
+        "torchvision.transforms": _tv2,
+        "torchvision.transforms.v2": _tv2v,
+        "torchvision.transforms.v2.functional": _tvF,
+    })
+
 try:
     from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer
-    from transformers.models.qwen2_5_vl import Qwen2_5_VLImageProcessor
     from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
-except ImportError:
+    from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+except ImportError as e:
     sys.exit(
-        "[ERROR] transformers is not installed or too old.\n"
+        f"[ERROR] transformers import failed: {e}\n"
         "        Run:  pip install 'transformers>=5.0.0'"
     )
 
@@ -132,7 +155,7 @@ def load_qwen() -> Tuple["Qwen2_5_VLForConditionalGeneration", "Qwen2_5_VLProces
     Jetson wheel.  Since we only pass still images this is fully equivalent.
     """
     print(f"[init] Loading {MODEL_ID} on device={DEVICE}, dtype={DTYPE} ...")
-    image_processor = Qwen2_5_VLImageProcessor.from_pretrained(MODEL_ID)
+    image_processor = Qwen2VLImageProcessor.from_pretrained(MODEL_ID)
     tokenizer       = AutoTokenizer.from_pretrained(MODEL_ID)
     processor       = Qwen2_5_VLProcessor(
         image_processor=image_processor,
