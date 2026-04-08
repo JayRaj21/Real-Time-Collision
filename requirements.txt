@@ -27,7 +27,6 @@
 
 # Vision-Language Model (Qwen2.5-VL) and HuggingFace tooling
 transformers>=5.0.0
-qwen-vl-utils>=0.0.8  # Qwen2.5-VL image/video preprocessing utilities
 
 # Image bridge between OpenCV (NumPy) and Tkinter (PhotoImage)
 Pillow>=10.0.0
