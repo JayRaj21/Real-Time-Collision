@@ -54,6 +54,7 @@ if "torchvision" not in sys.modules:
     _tv2v = _make_mod("torchvision.transforms.v2")
     _tv2v.functional = _tvF
     _tv2.v2 = _tv2v
+    _tv2.InterpolationMode = _InterpolationMode   # image_utils.py imports this
     _tv.transforms = _tv2
     sys.modules.update({
         "torchvision": _tv,
