@@ -1,6 +1,6 @@
 # Jetson Collision Detector
 
-Real-time object detection and collision identification on a **Jetson Orin Nano** with a **Waveshare IMX219-160 CSI camera**, using **Qwen2.5-VL-3B** as the vision-language model.
+Real-time object detection and collision identification on a **Jetson Orin Nano** with a **Waveshare IMX219-160 CSI camera**, using **SmolVLM-Instruct** as the vision-language model.
 
 ---
 
@@ -52,7 +52,7 @@ Do **not** use `pip install opencv-python` — the PyPI wheel lacks GStreamer su
 pip install -r requirements.txt
 ```
 
-The Qwen2.5-VL-3B model weights (~6 GB) are downloaded automatically on first run.
+The SmolVLM-Instruct model weights (~4 GB) are downloaded automatically on first run.
 
 ---
 

@@ -2,16 +2,16 @@
 """
 Jetson Orin Nano — real-time object collision detector  (v2 — VLM edition)
 Camera : Waveshare IMX219-160 CSI via GStreamer (nvarguscamerasrc)
-Model  : Qwen2.5-VL-3B-Instruct (Qwen/Qwen2.5-VL-3B-Instruct)
+Model  : SmolVLM-Instruct (HuggingFaceTB/SmolVLM-Instruct, ~2.2B params)
 GUI    : Tkinter / X11
 
 Key difference from v1:
   v1 used YOLOv8 (pure object-detection CNN, ~30+ FPS on Jetson GPU).
-  v2 uses Qwen2.5-VL-3B, a 3B-parameter Vision-Language Model natively
-  supported in transformers 5.x.  It is prompted to return all detected
-  objects as structured JSON bounding boxes, so the downstream collision
-  logic is identical to v1.
-  Expected throughput: 1–4 FPS on Jetson Orin Nano (GPU, float16).
+  v2 uses SmolVLM-Instruct, a 2.2B-parameter Vision-Language Model that
+  fits in ~5 GB — within the Jetson Orin Nano's 8 GB unified memory.
+  It is prompted to return detected objects as structured JSON bounding
+  boxes, so the downstream collision logic is identical to v1.
+  Expected throughput: 1–3 FPS on Jetson Orin Nano (GPU, float16).
 """
 
 import os
@@ -92,10 +92,7 @@ if "torchvision" not in sys.modules:
     })
 
 try:
-    from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer
-    from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
-    from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
-    from transformers.video_processing_utils import BaseVideoProcessor
+    from transformers import AutoProcessor, AutoModelForVision2Seq
 except ImportError as e:
     sys.exit(
         f"[ERROR] transformers import failed: {e}\n"
@@ -120,7 +117,7 @@ VLM_H       = 640
 DISP_W      = 960
 DISP_H      = 540
 
-MODEL_ID    = "Qwen/Qwen2.5-VL-3B-Instruct"
+MODEL_ID    = "HuggingFaceTB/SmolVLM-Instruct"
 DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE       = torch.float16 if DEVICE == "cuda" else torch.float32
 
@@ -132,7 +129,7 @@ DETECT_PROMPT = (
     "Return only a JSON array, no extra text."
 )
 
-# Type alias (conf stored as 1.0 — Qwen2.5-VL does not output confidence scores)
+# Type alias (conf stored as 1.0 — SmolVLM does not output confidence scores)
 Detection = Dict  # keys: label (str), box (x1,y1,x2,y2 ints), conf (float)
 
 
@@ -179,30 +176,16 @@ def find_collisions(dets: List[Detection]) -> List[Tuple[int, int]]:
     ]
 
 
-# ── Qwen2.5-VL inference helpers ──────────────────────────────────────────────
+# ── SmolVLM inference helpers ─────────────────────────────────────────────────
 
-def load_qwen() -> Tuple["Qwen2_5_VLForConditionalGeneration", "Qwen2_5_VLProcessor"]:
+def load_model() -> Tuple["AutoModelForVision2Seq", "AutoProcessor"]:
     """
-    Download (first run, ~6 GB) and load Qwen2.5-VL-3B-Instruct onto DEVICE.
+    Download (first run, ~4 GB) and load SmolVLM-Instruct onto DEVICE.
     Subsequent runs load from ~/.cache/huggingface/hub/.
-
-    The processor is built manually (image + tokenizer only) to avoid the
-    Qwen2VLVideoProcessor dependency on torchvision, which has no pre-built
-    Jetson wheel.  Since we only pass still images this is fully equivalent.
     """
     print(f"[init] Loading {MODEL_ID} on device={DEVICE}, dtype={DTYPE} ...")
-    image_processor = Qwen2VLImageProcessor.from_pretrained(MODEL_ID)
-    tokenizer       = AutoTokenizer.from_pretrained(MODEL_ID)
-    # A no-op video processor stub is required to satisfy the type check in
-    # Qwen2_5_VLProcessor.__init__; we never call it since we only pass images.
-    class _NoOpVideoProcessor(BaseVideoProcessor):
-        def __call__(self, *a, **kw): return {}
-    processor       = Qwen2_5_VLProcessor(
-        image_processor=image_processor,
-        tokenizer=tokenizer,
-        video_processor=_NoOpVideoProcessor(),
-    )
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    processor = AutoProcessor.from_pretrained(MODEL_ID)
+    model = AutoModelForVision2Seq.from_pretrained(
         MODEL_ID,
         torch_dtype=DTYPE,
     ).to(DEVICE)
@@ -252,13 +235,13 @@ def parse_detections(raw: str, orig_w: int, orig_h: int) -> List[Detection]:
     return dets
 
 
-def run_qwen_od(
-    model:     "Qwen2_5_VLForConditionalGeneration",
+def run_vlm_od(
+    model:     "AutoModelForVision2Seq",
     processor: "AutoProcessor",
     frame_bgr: np.ndarray,
 ) -> List[Detection]:
     """
-    Run Qwen2.5-VL object detection on a BGR numpy frame.
+    Run SmolVLM object detection on a BGR numpy frame.
     Returns a list of Detection dicts with bounding boxes in original frame pixels.
     """
     orig_h, orig_w = frame_bgr.shape[:2]
@@ -272,17 +255,15 @@ def run_qwen_od(
         {
             "role": "user",
             "content": [
-                {"type": "image", "image": pil_img},
-                {"type": "text",  "text": DETECT_PROMPT},
+                {"type": "image"},
+                {"type": "text", "text": DETECT_PROMPT},
             ],
         }
     ]
 
-    text = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
+    prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
     inputs = processor(
-        text=[text],
+        text=prompt,
         images=[pil_img],
         return_tensors="pt",
     ).to(DEVICE)
@@ -295,10 +276,11 @@ def run_qwen_od(
         )
 
     # Decode only the newly generated tokens
-    input_len = inputs["input_ids"].shape[1]
-    new_ids    = generated_ids[:, input_len:]
+    input_len  = inputs["input_ids"].shape[1]
     raw_output = processor.batch_decode(
-        new_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        generated_ids[:, input_len:],
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
     )[0]
 
     return parse_detections(raw_output, orig_w, orig_h)
@@ -333,7 +315,7 @@ class CameraThread(threading.Thread):
 
 class InferenceThread(threading.Thread):
     """
-    Pulls frames from in_queue, runs Qwen2.5-VL-3B on GPU, and pushes
+    Pulls frames from in_queue, runs SmolVLM on GPU, and pushes
     (detections, collisions) into out_queue.
 
     Qwen2.5-VL is a generative VLM — inference is slower than YOLO
@@ -365,7 +347,7 @@ class InferenceThread(threading.Thread):
             except queue.Empty:
                 continue
 
-            dets    = run_qwen_od(self._model, self._processor, frame)
+            dets    = run_vlm_od(self._model, self._processor, frame)
             payload = (dets, find_collisions(dets))
 
             while not self._out_queue.empty():
@@ -439,7 +421,7 @@ class App:
 
         self.show_boxes = tk.BooleanVar(value=True)
 
-        root.title("Jetson Collision Detector  [v2 — Qwen2.5-VL-3B]")
+        root.title("Jetson Collision Detector  [v2 — SmolVLM]")
         root.configure(bg="#111111")
         root.resizable(False, False)
         root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -448,7 +430,7 @@ class App:
         bar.pack(fill=tk.X, side=tk.TOP)
 
         tk.Label(
-            bar, text="Jetson Collision Detector  [Qwen2.5-VL-3B]",
+            bar, text="Jetson Collision Detector  [SmolVLM]",
             bg="#1a1a2e", fg="#e0e0e0",
             font=("Helvetica", 13, "bold"),
         ).pack(side=tk.LEFT, padx=12)
@@ -482,8 +464,8 @@ class App:
         ).pack(side=tk.LEFT, padx=6)
 
         tk.Label(
-            bar, text="  Qwen2.5-VL-3B  ",
-            bg="#1565c0", fg="#ffffff",
+            bar, text="  SmolVLM  ",
+            bg="#006064", fg="#ffffff",
             font=("Courier", 10, "bold"), relief=tk.FLAT, padx=2,
         ).pack(side=tk.LEFT, padx=4)
 
@@ -568,11 +550,11 @@ def main() -> None:
     print(f"[init] Camera opened OK  ({int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}×"
           f"{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))})")
 
-    model, processor = load_qwen()
+    model, processor = load_model()
 
     print("[init] Running warm-up inference ...")
     dummy_bgr = np.zeros((VLM_H, VLM_W, 3), dtype=np.uint8)
-    run_qwen_od(model, processor, dummy_bgr)
+    run_vlm_od(model, processor, dummy_bgr)
     print("[init] Model ready.")
 
     cam_thread = CameraThread(cap)
