@@ -1,0 +1,16 @@
+# Model weights — downloaded automatically on first run
+*.pt
+*.engine
+*.onnx
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Ultralytics run artifacts
+runs/
+
+# Temp wheel downloads
+*.whl
