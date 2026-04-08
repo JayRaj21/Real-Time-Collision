@@ -45,24 +45,50 @@ if "torchvision" not in sys.modules:
         m.__loader__ = None
         m.__package__ = name.rsplit(".", 1)[0]
         return m
+
     class _InterpolationMode(_enum.Enum):
         NEAREST = 0; NEAREST_EXACT = 8
         BILINEAR = 2; BICUBIC = 3
         BOX = 4; HAMMING = 5; LANCZOS = 1
-    _tvF = _make_mod("torchvision.transforms.v2.functional")
-    _tvF.InterpolationMode = _InterpolationMode
-    _tv   = _make_mod("torchvision")
-    _tv2  = _make_mod("torchvision.transforms")
-    _tv2v = _make_mod("torchvision.transforms.v2")
-    _tv2v.functional = _tvF
-    _tv2.v2 = _tv2v
-    _tv2.InterpolationMode = _InterpolationMode   # image_utils.py imports this
-    _tv.transforms = _tv2
+
+    # Build all submodules transformers may import from torchvision
+    _tv             = _make_mod("torchvision")
+    _tv_io          = _make_mod("torchvision.io")
+    _tv_ops         = _make_mod("torchvision.ops")
+    _tv_ops_boxes   = _make_mod("torchvision.ops.boxes")
+    _tv_misc        = _make_mod("torchvision.misc")
+    _tv_misc_ops    = _make_mod("torchvision.misc.ops")
+    _tv2            = _make_mod("torchvision.transforms")
+    _tv2f           = _make_mod("torchvision.transforms.functional")
+    _tv2v           = _make_mod("torchvision.transforms.v2")
+    _tv2vf          = _make_mod("torchvision.transforms.v2.functional")
+
+    # Populate InterpolationMode wherever it's accessed
+    for _m in (_tv2, _tv2f, _tv2v, _tv2vf):
+        _m.InterpolationMode = _InterpolationMode
+
+    # Wire up the module tree
+    _tv.io          = _tv_io
+    _tv.ops         = _tv_ops
+    _tv_ops.boxes   = _tv_ops_boxes
+    _tv.misc        = _tv_misc
+    _tv_misc.ops    = _tv_misc_ops
+    _tv.transforms  = _tv2
+    _tv2.functional = _tv2f
+    _tv2.v2         = _tv2v
+    _tv2v.functional = _tv2vf
+
     sys.modules.update({
-        "torchvision": _tv,
-        "torchvision.transforms": _tv2,
-        "torchvision.transforms.v2": _tv2v,
-        "torchvision.transforms.v2.functional": _tvF,
+        "torchvision":                          _tv,
+        "torchvision.io":                       _tv_io,
+        "torchvision.ops":                      _tv_ops,
+        "torchvision.ops.boxes":                _tv_ops_boxes,
+        "torchvision.misc":                     _tv_misc,
+        "torchvision.misc.ops":                 _tv_misc_ops,
+        "torchvision.transforms":               _tv2,
+        "torchvision.transforms.functional":    _tv2f,
+        "torchvision.transforms.v2":            _tv2v,
+        "torchvision.transforms.v2.functional": _tv2vf,
     })
 
 try:
