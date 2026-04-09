@@ -122,11 +122,11 @@ DISP_W      = 960
 DISP_H      = 540
 
 MODEL_ID    = "HuggingFaceTB/SmolVLM-500M-Instruct"
-# Lower camera resolution (640×480 @ 15fps) reduces NVMM usage enough to
-# leave headroom for CUDA on Jetson's unified memory.  Falls back to CPU if
-# CUDA is unavailable or if OOM is hit during model load.
-DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
-DTYPE       = torch.float16 if DEVICE == "cuda" else torch.float32
+# CUDA inference is incompatible with the CSI camera on Jetson Orin Nano:
+# both compete for NVMM (unified memory), and CUDA activation allocations
+# during inference evict the camera's NVMM buffers even at 640×480.
+DEVICE      = "cpu"
+DTYPE       = torch.float32
 
 # Prompt instructs the model to return JSON bounding boxes
 DETECT_PROMPT = (
@@ -191,7 +191,6 @@ def load_model() -> Tuple["Idefics3ForConditionalGeneration", "AutoProcessor"]:
     Subsequent runs load from ~/.cache/huggingface/hub/.
     SmolVLM is built on the Idefics3 architecture.
     """
-    global DEVICE, DTYPE  # noqa: PLW0603
     print(f"[init] Loading {MODEL_ID} on device={DEVICE}, dtype={DTYPE} ...")
     if DEVICE == "cuda":
         torch.cuda.empty_cache()
@@ -202,17 +201,9 @@ def load_model() -> Tuple["Idefics3ForConditionalGeneration", "AutoProcessor"]:
         MODEL_ID,
         torch_dtype=DTYPE,
         low_cpu_mem_usage=True,
+        attn_implementation="eager",  # SDPA uses enable_gqa unsupported by Jetson PyTorch 2.5.0a
     )
-    if DEVICE == "cuda":
-        torch.cuda.empty_cache()
-    try:
-        model = model.to(DEVICE)
-    except (RuntimeError, torch.cuda.OutOfMemoryError):
-        print("[init] CUDA OOM during model load — falling back to CPU")
-        torch.cuda.empty_cache()
-        DEVICE = "cpu"
-        DTYPE  = torch.float32
-        model  = model.to(DEVICE)
+    model = model.to(DEVICE)
     model.eval()
     return model, processor
 
@@ -299,7 +290,8 @@ def run_vlm_od(
                 max_new_tokens=256,
                 do_sample=False,
             )
-    except (RuntimeError, torch.cuda.OutOfMemoryError):
+    except (RuntimeError, torch.cuda.OutOfMemoryError, TypeError) as exc:
+        print(f"[vlm] inference error: {exc}")
         if DEVICE == "cuda":
             torch.cuda.empty_cache()
         return []
