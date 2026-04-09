@@ -106,7 +106,7 @@ except ImportError as e:
 
 GST_PIPELINE = (
     "nvarguscamerasrc sensor-id=0 ! "
-    "video/x-raw(memory:NVMM),width=640,height=480,framerate=15/1 ! "
+    "video/x-raw(memory:NVMM),width=1280,height=720,framerate=30/1 ! "
     "nvvidconv flip-method=0 ! "
     "video/x-raw,format=BGRx ! "
     "videoconvert ! "
