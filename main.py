@@ -188,11 +188,19 @@ def load_model() -> Tuple["Idefics3ForConditionalGeneration", "AutoProcessor"]:
     SmolVLM is built on the Idefics3 architecture.
     """
     print(f"[init] Loading {MODEL_ID} on device={DEVICE}, dtype={DTYPE} ...")
+    if DEVICE == "cuda":
+        torch.cuda.empty_cache()
     processor = AutoProcessor.from_pretrained(MODEL_ID)
+    # low_cpu_mem_usage streams weights directly to the target device,
+    # avoiding a full CPU copy before the CUDA transfer.
     model = Idefics3ForConditionalGeneration.from_pretrained(
         MODEL_ID,
         torch_dtype=DTYPE,
-    ).to(DEVICE)
+        low_cpu_mem_usage=True,
+    )
+    if DEVICE == "cuda":
+        torch.cuda.empty_cache()
+    model = model.to(DEVICE)
     model.eval()
     return model, processor
 
