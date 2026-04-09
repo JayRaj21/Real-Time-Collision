@@ -94,7 +94,8 @@ if "torchvision" not in sys.modules:
     })
 
 try:
-    from transformers import AutoProcessor, AutoModelForVision2Seq
+    from transformers import AutoProcessor
+    from transformers.models.idefics3 import Idefics3ForConditionalGeneration
 except ImportError as e:
     sys.exit(
         f"[ERROR] transformers import failed: {e}\n"
@@ -180,14 +181,15 @@ def find_collisions(dets: List[Detection]) -> List[Tuple[int, int]]:
 
 # ── SmolVLM inference helpers ─────────────────────────────────────────────────
 
-def load_model() -> Tuple["AutoModelForVision2Seq", "AutoProcessor"]:
+def load_model() -> Tuple["Idefics3ForConditionalGeneration", "AutoProcessor"]:
     """
     Download (first run, ~4 GB) and load SmolVLM-Instruct onto DEVICE.
     Subsequent runs load from ~/.cache/huggingface/hub/.
+    SmolVLM is built on the Idefics3 architecture.
     """
     print(f"[init] Loading {MODEL_ID} on device={DEVICE}, dtype={DTYPE} ...")
     processor = AutoProcessor.from_pretrained(MODEL_ID)
-    model = AutoModelForVision2Seq.from_pretrained(
+    model = Idefics3ForConditionalGeneration.from_pretrained(
         MODEL_ID,
         torch_dtype=DTYPE,
     ).to(DEVICE)
@@ -238,7 +240,7 @@ def parse_detections(raw: str, orig_w: int, orig_h: int) -> List[Detection]:
 
 
 def run_vlm_od(
-    model:     "AutoModelForVision2Seq",
+    model:     "Idefics3ForConditionalGeneration",
     processor: "AutoProcessor",
     frame_bgr: np.ndarray,
 ) -> List[Detection]:
