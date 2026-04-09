@@ -114,9 +114,10 @@ GST_PIPELINE = (
     "appsink drop=1"
 )
 
-# Resize frames before sending to the VLM — smaller = faster inference
-VLM_W       = 640
-VLM_H       = 640
+# SmolVLM tiles images into 384×384 patches; using exactly 384 gives one tile
+# and the smallest possible activation memory footprint on Jetson.
+VLM_W       = 384
+VLM_H       = 384
 DISP_W      = 960
 DISP_H      = 540
 
@@ -280,12 +281,17 @@ def run_vlm_od(
         return_tensors="pt",
     ).to(DEVICE)
 
-    with torch.no_grad():
-        generated_ids = model.generate(
-            **inputs,
-            max_new_tokens=512,
-            do_sample=False,
-        )
+    try:
+        with torch.no_grad():
+            generated_ids = model.generate(
+                **inputs,
+                max_new_tokens=256,
+                do_sample=False,
+            )
+    except (RuntimeError, torch.cuda.OutOfMemoryError):
+        if DEVICE == "cuda":
+            torch.cuda.empty_cache()
+        return []
 
     # Decode only the newly generated tokens
     input_len  = inputs["input_ids"].shape[1]
@@ -563,10 +569,6 @@ def main() -> None:
           f"{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))})")
 
     model, processor = load_model()
-
-    print("[init] Running warm-up inference ...")
-    dummy_bgr = np.zeros((VLM_H, VLM_W, 3), dtype=np.uint8)
-    run_vlm_od(model, processor, dummy_bgr)
     print("[init] Model ready.")
 
     cam_thread = CameraThread(cap)
