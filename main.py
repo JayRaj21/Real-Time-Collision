@@ -126,7 +126,7 @@ MODEL_ID    = "HuggingFaceTB/SmolVLM-500M-Instruct"
 # both compete for NVMM (unified memory), and CUDA activation allocations
 # during inference evict the camera's NVMM buffers even at 640×480.
 DEVICE      = "cpu"
-DTYPE       = torch.float32
+DTYPE       = torch.float16  # fp16 halves model RAM (~950 MB vs ~1.9 GB), leaving headroom for camera NVMM
 
 # Prompt instructs the model to return JSON bounding boxes
 DETECT_PROMPT = (
