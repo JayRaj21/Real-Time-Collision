@@ -287,7 +287,7 @@ def run_vlm_od(
         with torch.no_grad():
             generated_ids = model.generate(
                 **inputs,
-                max_new_tokens=256,
+                max_new_tokens=80,  # JSON array of objects needs ~40-80 tokens
                 do_sample=False,
             )
     except (RuntimeError, torch.cuda.OutOfMemoryError, TypeError) as exc:
