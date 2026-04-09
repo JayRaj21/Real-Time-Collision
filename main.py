@@ -41,8 +41,10 @@ import types as _types, enum as _enum, importlib.machinery as _imm
 if "torchvision" not in sys.modules:
     def _make_mod(name):
         m = _types.ModuleType(name)
-        m.__spec__ = _imm.ModuleSpec(name, None)
-        m.__loader__ = None
+        m.__spec__    = _imm.ModuleSpec(name, loader=_imm.SourceFileLoader(name, ""), origin="stub")
+        m.__file__    = "<torchvision-stub>"
+        m.__version__ = "0.20.0"
+        m.__loader__  = None
         m.__package__ = name.rsplit(".", 1)[0]
         return m
 
