@@ -122,8 +122,10 @@ DISP_W      = 960
 DISP_H      = 540
 
 MODEL_ID    = "HuggingFaceTB/SmolVLM-500M-Instruct"
-DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
-DTYPE       = torch.float16 if DEVICE == "cuda" else torch.float32
+# The CSI camera (Argus) and CUDA both require NVMM on Jetson's unified memory.
+# Running both simultaneously exhausts NVMM, so the VLM runs on CPU.
+DEVICE      = "cpu"
+DTYPE       = torch.float32
 
 # Prompt instructs the model to return JSON bounding boxes
 DETECT_PROMPT = (
