@@ -7,8 +7,8 @@ GUI    : Tkinter / X11
 
 Key difference from v1:
   v1 used YOLOv8 (pure object-detection CNN, ~30+ FPS on Jetson GPU).
-  v2 uses SmolVLM-Instruct, a 2.2B-parameter Vision-Language Model that
-  fits in ~5 GB — within the Jetson Orin Nano's 8 GB unified memory.
+  v2 uses SmolVLM-500M-Instruct, a 500M-parameter Vision-Language Model
+  that fits comfortably within the Jetson Orin Nano's 8 GB unified memory.
   It is prompted to return detected objects as structured JSON bounding
   boxes, so the downstream collision logic is identical to v1.
   Expected throughput: 1–3 FPS on Jetson Orin Nano (GPU, float16).
@@ -120,7 +120,7 @@ VLM_H       = 640
 DISP_W      = 960
 DISP_H      = 540
 
-MODEL_ID    = "HuggingFaceTB/SmolVLM-Instruct"
+MODEL_ID    = "HuggingFaceTB/SmolVLM-500M-Instruct"
 DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE       = torch.float16 if DEVICE == "cuda" else torch.float32
 
@@ -183,7 +183,7 @@ def find_collisions(dets: List[Detection]) -> List[Tuple[int, int]]:
 
 def load_model() -> Tuple["Idefics3ForConditionalGeneration", "AutoProcessor"]:
     """
-    Download (first run, ~4 GB) and load SmolVLM-Instruct onto DEVICE.
+    Download (first run, ~1 GB) and load SmolVLM-500M-Instruct onto DEVICE.
     Subsequent runs load from ~/.cache/huggingface/hub/.
     SmolVLM is built on the Idefics3 architecture.
     """
