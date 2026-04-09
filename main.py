@@ -191,6 +191,7 @@ def load_model() -> Tuple["Idefics3ForConditionalGeneration", "AutoProcessor"]:
     Subsequent runs load from ~/.cache/huggingface/hub/.
     SmolVLM is built on the Idefics3 architecture.
     """
+    global DEVICE, DTYPE  # noqa: PLW0603
     print(f"[init] Loading {MODEL_ID} on device={DEVICE}, dtype={DTYPE} ...")
     if DEVICE == "cuda":
         torch.cuda.empty_cache()
@@ -207,7 +208,6 @@ def load_model() -> Tuple["Idefics3ForConditionalGeneration", "AutoProcessor"]:
     try:
         model = model.to(DEVICE)
     except (RuntimeError, torch.cuda.OutOfMemoryError):
-        global DEVICE, DTYPE  # noqa: PLW0603
         print("[init] CUDA OOM during model load — falling back to CPU")
         torch.cuda.empty_cache()
         DEVICE = "cpu"
