@@ -106,12 +106,12 @@ except ImportError as e:
 
 GST_PIPELINE = (
     "nvarguscamerasrc sensor-id=0 ! "
-    "video/x-raw(memory:NVMM),width=1280,height=720,framerate=30/1 ! "
+    "video/x-raw(memory:NVMM),width=640,height=480,framerate=15/1 ! "
     "nvvidconv flip-method=0 ! "
     "video/x-raw,format=BGRx ! "
     "videoconvert ! "
     "video/x-raw,format=BGR ! "
-    "appsink drop=1"
+    "appsink max-buffers=1 drop=1"
 )
 
 # SmolVLM tiles images into 384×384 patches; using exactly 384 gives one tile
@@ -122,10 +122,11 @@ DISP_W      = 960
 DISP_H      = 540
 
 MODEL_ID    = "HuggingFaceTB/SmolVLM-500M-Instruct"
-# The CSI camera (Argus) and CUDA both require NVMM on Jetson's unified memory.
-# Running both simultaneously exhausts NVMM, so the VLM runs on CPU.
-DEVICE      = "cpu"
-DTYPE       = torch.float32
+# Lower camera resolution (640×480 @ 15fps) reduces NVMM usage enough to
+# leave headroom for CUDA on Jetson's unified memory.  Falls back to CPU if
+# CUDA is unavailable or if OOM is hit during model load.
+DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
+DTYPE       = torch.float16 if DEVICE == "cuda" else torch.float32
 
 # Prompt instructs the model to return JSON bounding boxes
 DETECT_PROMPT = (
@@ -203,7 +204,15 @@ def load_model() -> Tuple["Idefics3ForConditionalGeneration", "AutoProcessor"]:
     )
     if DEVICE == "cuda":
         torch.cuda.empty_cache()
-    model = model.to(DEVICE)
+    try:
+        model = model.to(DEVICE)
+    except (RuntimeError, torch.cuda.OutOfMemoryError):
+        global DEVICE, DTYPE  # noqa: PLW0603
+        print("[init] CUDA OOM during model load — falling back to CPU")
+        torch.cuda.empty_cache()
+        DEVICE = "cpu"
+        DTYPE  = torch.float32
+        model  = model.to(DEVICE)
     model.eval()
     return model, processor
 
@@ -303,7 +312,10 @@ def run_vlm_od(
         clean_up_tokenization_spaces=False,
     )[0]
 
-    return parse_detections(raw_output, orig_w, orig_h)
+    dets = parse_detections(raw_output, orig_w, orig_h)
+    if not dets:
+        print(f"[vlm] raw output (no detections parsed): {raw_output!r}")
+    return dets
 
 
 # ── Camera thread ─────────────────────────────────────────────────────────────
