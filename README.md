@@ -1,211 +1,97 @@
-# Jetson Collision Detector
+# Real-Time Object Detection with YOLO26
 
-Real-time object detection and collision/contact event identification running
-on a **Jetson Orin Nano** with a **Waveshare IMX219-160 CSI camera**.
-
-- Detects objects with **YOLOv8n** running on the Jetson GPU (CUDA)
-- Identifies when any two detected bounding boxes touch or overlap
-- Draws a red line between colliding objects and labels the event (e.g. `book ↔ table`)
-- Tkinter/X11 GUI with a live camera feed and a "Show Boxes" toggle
+Live webcam object detection using [YOLO26n](https://docs.ultralytics.com/models/yolo26/) — the nano variant of Ultralytics' latest model. Bounding boxes, class labels, confidence scores, and a live FPS counter are overlaid on the video feed.
 
 ---
 
-## Prerequisites
+## Requirements
 
-| Requirement | Minimum version |
-|---|---|
-| JetPack | 5.1.2 (L4T r35) or 6.0 (L4T r36) |
-| Python | 3.8+ (3.10 on JetPack 6) |
-| CUDA | 11.4+ (bundled with JetPack) |
+- Python 3.9+
+- A connected webcam (uses `/dev/video0` by default)
+- Linux (tested), should also work on macOS/Windows with minor path adjustments
 
 ---
 
-## 1 — Enable the CSI camera
+## Installation
 
-### 1a. Physical connection
-Seat the IMX219-160 ribbon cable into the **CAM0** connector on the Orin Nano
-carrier board with the blue strip facing toward the board edge.
+### 1. Create and activate a virtual environment (recommended)
 
-### 1b. Verify the camera is visible to the driver
 ```bash
-# Should print at least one /dev/video* device
-ls /dev/video*
-
-# Quick GStreamer smoke-test (captures one frame and discards it)
-gst-launch-1.0 nvarguscamerasrc sensor-id=0 num-buffers=1 ! fakesink
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-If `nvarguscamerasrc` fails with *"No cameras available"*, check:
-- The ribbon cable is seated in CAM0 (not CAM1)
-- `sudo systemctl status nvargus-daemon` — the Argus daemon must be running
-- The device tree overlay for the IMX219 is enabled
-
-### 1c. Enable the camera overlay (if not already active)
-```bash
-sudo /opt/nvidia/jetson-io/jetson-io.py
-# Navigate to: Configure Jetson 24pin CSI Connector
-# Enable: Camera IMX219 Dual
-# Save and reboot
-```
-
----
-
-## 2 — Install JetPack-compatible PyTorch
-
-> **Do not** run `pip install torch` — the PyPI wheel is x86-64 only and will
-> either fail or run on CPU without CUDA.
-
-### JetPack 6 (L4T r36, CUDA 12.x) — Python 3.10
-```bash
-# Download the NVIDIA-provided aarch64 wheel
-wget https://developer.download.nvidia.com/compute/redist/jp/v60/pytorch/torch-2.3.0a0+ebedce2.nv24.02-cp310-cp310-linux_aarch64.whl
-
-pip install torch-2.3.0a0+ebedce2.nv24.02-cp310-cp310-linux_aarch64.whl
-```
-
-### JetPack 5.x (L4T r35, CUDA 11.4) — Python 3.8
-```bash
-wget https://developer.download.nvidia.com/compute/redist/jp/v512/pytorch/torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl
-
-pip install torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl
-```
-
-Find the full list of available wheels at:
-<https://forums.developer.nvidia.com/t/pytorch-for-jetson/72048>
-
-### Verify CUDA is accessible
-```bash
-python3 -c "import torch; print(torch.cuda.is_available())"
-# Expected output: True
-```
-
----
-
-## 3 — Install GStreamer dependencies
-
-JetPack ships the required GStreamer Jetson plugins. Confirm and install any
-missing pieces:
+### 2. Install CPU dependencies
 
 ```bash
-sudo apt update
-sudo apt install -y \
-    gstreamer1.0-tools \
-    gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad \
-    gstreamer1.0-plugins-ugly \
-    libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev
-
-# Jetson-specific GStreamer elements (nvarguscamerasrc, nvvidconv, …)
-# These are part of nvidia-l4t-gstreamer — installed by JetPack automatically.
-# If missing:
-sudo apt install -y nvidia-l4t-gstreamer
-```
-
-### GStreamer-enabled OpenCV
-
-The app requires the system `python3-opencv` package, which is compiled with
-GStreamer support. **Do not** replace it with the PyPI `opencv-python` wheel.
-
-```bash
-sudo apt install -y python3-opencv
-
-# Verify GStreamer support is present
-python3 -c "import cv2; print(cv2.getBuildInformation())" | grep -i gstreamer
-# Should show:  GStreamer:   YES
-```
-
----
-
-## 4 — Install Python dependencies
-
-```bash
-cd jetson-collision-detector
-
-# Install remaining packages (ultralytics, Pillow, numpy)
 pip install -r requirements.txt
 ```
 
-`yolov8n.pt` (~6 MB) is downloaded automatically on the first run.
+### 3. (GPU only) Install PyTorch with CUDA support
 
----
+The `requirements.txt` installs the CPU-only build of PyTorch by default. If you have an NVIDIA GPU, replace it with the CUDA-enabled build **before** installing the rest:
 
-## 5 — Run the application
-
-### Running at the physical desktop
 ```bash
-python3 main.py
+# Example for CUDA 12.1 — adjust the index URL for your CUDA version:
+# https://pytorch.org/get-started/locally/
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install ultralytics opencv-python
 ```
 
-### Running over SSH with X forwarding
+The model weights (`yolo26n.pt`) are downloaded automatically on first run.
+
+---
+
+## Running
+
+### GPU version (NVIDIA CUDA)
+
 ```bash
-# On your laptop/desktop:
-ssh -X jetson@<jetson-ip>
-
-# On the Jetson:
-export DISPLAY=:0   # use the Jetson's own display, or :10 for X forwarding
-python3 main.py
+python detect_gpu.py
 ```
 
-If `DISPLAY` is not set, the app sets it to `:0` automatically.
+On startup the script verifies that CUDA is available. If no compatible GPU is found it prints an error and tells you to run the CPU version instead.
 
-### Expected startup output
+### CPU version
+
+```bash
+python detect_cpu.py
 ```
-[init] Opening CSI camera ...
-[init] Camera opened OK  (1280×720)
-[init] Loading YOLOv8n on device=CUDA ...
-[init] Model ready.
-[init] GUI started.  Close the window or press Ctrl-C to quit.
-```
+
+No GPU required. Works on any machine with Python and a webcam.
+
+### Controls
+
+| Key | Action |
+|-----|--------|
+| `q` | Quit and close the window |
 
 ---
 
-## 6 — GUI controls
+## Expected FPS
 
-| Control | Function |
-|---|---|
-| **Show Boxes** checkbox | Toggle all per-object bounding boxes on/off |
-| **FPS** badge (top-right) | Rolling 1-second frame rate of the display loop |
-| **Contacts** badge | Number of active collision/contact events in the current frame |
-| Window close button / Ctrl-C | Graceful shutdown |
+| Hardware | Typical FPS |
+|----------|------------|
+| Modern NVIDIA GPU (RTX 30/40 series) | 60 – 200+ FPS |
+| Older / mid-range GPU (GTX 10/16 series) | 30 – 80 FPS |
+| Modern CPU (8-core, e.g. Ryzen 5 / Core i5) | 8 – 20 FPS |
+| Older / low-power CPU | 2 – 8 FPS |
 
-Collision events are always visible regardless of the "Show Boxes" setting:
-a red line connects the two objects' centres, and a label such as
-`person ↔ chair` appears at the contact midpoint.
+YOLO26n is the nano variant — it is the fastest and most memory-efficient option. For higher accuracy at the cost of speed, swap `yolo26n.pt` for `yolo26s.pt`, `yolo26m.pt`, `yolo26l.pt`, or `yolo26x.pt` in either script.
 
 ---
 
-## 7 — Performance notes
+## Troubleshooting
 
-| Parameter | Value |
-|---|---|
-| YOLO input size | 640 × 640 |
-| Camera resolution | 1280 × 720 @ 30 fps |
-| Display resolution | 960 × 540 |
-| Target FPS | ≥ 20 |
+**Webcam not found**
+- Check that no other application is using the camera.
+- Try a different device index: change `cv2.VideoCapture(0)` to `cv2.VideoCapture(1)` if you have multiple cameras.
 
-Inference runs in a dedicated thread so the display loop is never stalled
-waiting for YOLO results. On a Jetson Orin Nano 8 GB you should see
-25–30 FPS in typical indoor scenes.
+**`libGL` error on headless / minimal Linux**
+```bash
+sudo apt-get install libgl1-mesa-glx
+```
 
-To increase throughput further:
-- Lower `YOLO_SIZE` to 320 in `main.py` (faster, slightly less accurate)
-- Lower `CONF_THRESH` to 0.30 or raise it to 0.50 to tune detections
-- Use `yolov8n.engine` (TensorRT export) instead of `yolov8n.pt`:
-  ```bash
-  yolo export model=yolov8n.pt format=engine device=0
-  ```
-  Then change `YOLO("yolov8n.pt")` to `YOLO("yolov8n.engine")` in `main.py`.
-
----
-
-## 8 — Troubleshooting
-
-| Symptom | Likely cause / fix |
-|---|---|
-| `RuntimeError: Cannot open CSI camera` | Argus daemon not running, or ribbon cable issue — run the GStreamer smoke-test in §1b |
-| `torch.cuda.is_available()` returns `False` | PyPI torch installed instead of Jetson wheel — reinstall per §2 |
-| `ImportError: No module named 'cv2'` | `python3-opencv` not installed — run `sudo apt install python3-opencv` |
-| `_tkinter.TclError: no display` | SSH session without X forwarding — set `DISPLAY=:0` to use the Jetson's local display |
-| Low FPS (< 15) | Thermal throttling — check `sudo tegrastats`; ensure the Jetson has adequate cooling |
-| Black canvas, no image | Camera opens but reads no frames — check `nvargus-daemon` and ribbon cable seating |
+**Low FPS on CPU**
+- Lower the input resolution by adding `cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)` after `VideoCapture(0)`.
+- Raise `CONF_THRESHOLD` (e.g. to `0.5`) to skip low-confidence detections faster.
