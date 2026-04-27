@@ -1,4 +1,5 @@
 import sys
+import argparse
 import time
 import queue
 import threading
@@ -23,6 +24,19 @@ ROLLING_WINDOW = 30
 
 
 # ---------------------------------------------------------------- helpers --
+
+def _gstreamer_csi_pipeline(sensor_id: int = 0, width: int = 1280,
+                             height: int = 720, fps: int = 30,
+                             flip_method: int = 0) -> str:
+    return (
+        f"nvarguscamerasrc sensor-id={sensor_id} ! "
+        f"video/x-raw(memory:NVMM), width={width}, height={height}, "
+        f"format=NV12, framerate={fps}/1 ! "
+        f"nvvidconv flip-method={flip_method} ! "
+        f"video/x-raw, width={width}, height={height}, format=BGRx ! "
+        f"videoconvert ! video/x-raw, format=BGR ! appsink drop=1"
+    )
+
 
 def _box_iou(b1, b2) -> float:
     ix1, iy1 = max(b1[0], b2[0]), max(b1[1], b2[1])
@@ -103,8 +117,10 @@ class _RollingMetrics:
 # --------------------------------------------------------------- app ------
 
 class DetectionApp:
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: tk.Tk, use_csi: bool = False,
+                 sensor_id: int = 0) -> None:
         self.root = root
+        self._use_csi = use_csi
         self.root.title("RT-DETR Object Detection — CPU")
         self.root.configure(bg=BG)
         self.root.resizable(False, False)
@@ -122,9 +138,15 @@ class DetectionApp:
         print("Loading RT-DETR model (this may take a moment)…")
         self.model = RTDETR(MODEL_PATH)
 
-        self.cap = cv2.VideoCapture(0)
+        if use_csi:
+            pipeline = _gstreamer_csi_pipeline(sensor_id=sensor_id)
+            self.cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+            src_label = f"CSI camera (sensor {sensor_id})"
+        else:
+            self.cap = cv2.VideoCapture(0)
+            src_label = "webcam (device 0)"
         if not self.cap.isOpened():
-            print("ERROR: Could not open webcam (device 0).")
+            print(f"ERROR: Could not open {src_label}.")
             sys.exit(1)
 
         global CANVAS_W, CANVAS_H
@@ -154,7 +176,7 @@ class DetectionApp:
                                 bg="black", highlightthickness=0)
         self.canvas.pack()
 
-        outer = tk.Frame(self.root, bg=PANEL_BG, width=240)
+        outer = tk.Frame(self.root, bg=PANEL_BG, width=260)
         outer.pack(side=tk.RIGHT, fill=tk.Y, padx=(6, 12), pady=12)
         outer.pack_propagate(False)
 
@@ -194,15 +216,11 @@ class DetectionApp:
         self._divider(right)
 
         # -- Quality --
-        self._section(right, f"QUALITY  ({ROLLING_WINDOW}-frame rolling)")
-        tk.Label(right, text="confidence-based estimates",
-                 bg=PANEL_BG, fg="#555555",
-                 font=("Helvetica", 7, "italic")).pack(anchor="w", padx=14)
+        self._section(right, "QUALITY METRICS")
         self._mv_precision = self._row(right, "Precision")
         self._mv_recall    = self._row(right, "Recall")
         self._mv_f1        = self._row(right, "F1 Score")
         self._mv_iou       = self._row(right, "Avg IoU")
-        self._mv_ap        = self._row(right, "AP (frame)")
         self._mv_map       = self._row(right, "mAP (rolling)")
         self._divider(right)
 
@@ -268,7 +286,8 @@ class DetectionApp:
             if not ret:
                 break
 
-            frame = cv2.flip(frame, 1)
+            if not self._use_csi:
+                frame = cv2.flip(frame, 1)
 
             results = self.model.predict(
                 frame, device=DEVICE, conf=CONF_THRESHOLD, imgsz=640, verbose=False
@@ -362,7 +381,6 @@ class DetectionApp:
             self._mv_recall.set(f"{m['recall']:.3f}")
             self._mv_f1.set(f"{m['f1']:.3f}")
             self._mv_iou.set(f"{m['iou']:.3f}" if m["n"] > 1 else "—")
-            self._mv_ap.set(f"{m['ap']:.3f}" if has else "—")
             self._mv_map.set(f"{m['mAP']:.3f}")
 
             self._classes_var.set(m["classes_str"])
@@ -383,10 +401,20 @@ class DetectionApp:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="RT-DETR CPU object detection")
+    parser.add_argument("--csi", action="store_true",
+                        help="Use CSI camera (IMX219) via nvarguscamerasrc")
+    parser.add_argument("--sensor-id", type=int, default=0,
+                        help="CSI sensor ID (default: 0)")
+    args = parser.parse_args()
+
     print("WARNING: RT-DETR is a large transformer model.")
     print("CPU inference will be slow (~1-3 FPS). Use detect_rtdetr_gpu.py for real-time speed.")
+    if args.csi:
+        print(f"Camera: CSI sensor {args.sensor_id} (IMX219 via nvarguscamerasrc)")
+
     root = tk.Tk()
-    DetectionApp(root)
+    DetectionApp(root, use_csi=args.csi, sensor_id=args.sensor_id)
     root.mainloop()
 
 
