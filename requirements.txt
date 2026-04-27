@@ -1,5 +1,6 @@
 ultralytics>=8.4.41
-opencv-python>=4.9.0
-torch>=2.0.0
+# opencv-python intentionally omitted — system OpenCV (with GStreamer) is used via system_cv2.pth
+# torch and torchvision are installed separately in setup.sh (Jetson-native wheel)
 torchvision>=0.15.0
+numpy>=1.23.0,<2.0.0
 Pillow>=10.0.0
