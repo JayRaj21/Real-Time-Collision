@@ -1,37 +1,6 @@
-# =============================================================================
-# requirements.txt — Jetson Orin Nano (JetPack 5.x / 6.x · L4T aarch64)
-# =============================================================================
-#
-# IMPORTANT — READ BEFORE pip install -r requirements.txt
-# ─────────────────────────────────────────────────────────────────────────────
-#
-# 1. PyTorch  ──  DO NOT install from PyPI.
-#    The PyPI wheel is built for x86-64 and will either fail to install or run
-#    without CUDA on aarch64.  Install the NVIDIA-provided Jetson wheel instead.
-#    See README.md §2 for the exact download URL and install command.
-#
-# 2. OpenCV   ──  DO NOT install opencv-python from PyPI.
-#    JetPack ships a GStreamer-enabled OpenCV build (python3-opencv).
-#    The PyPI wheel lacks the nvarguscamerasrc GStreamer plugin support and
-#    will break the CSI camera pipeline.
-#    Install via: sudo apt install python3-opencv
-#
-# Install everything else with:
-#    pip install -r requirements.txt
-# =============================================================================
-
-# Object-detection framework — downloads yolov8n.pt on first run (~6 MB)
-ultralytics>=8.2.0
-
-# Image bridge between OpenCV (NumPy) and Tkinter (PhotoImage)
+ultralytics>=8.4.41
+# opencv-python intentionally omitted — system OpenCV (with GStreamer) is used via system_cv2.pth
+# torch and torchvision are installed separately in setup.sh (Jetson-native wheel)
+torchvision>=0.15.0
+numpy>=1.23.0,<2.0.0
 Pillow>=10.0.0
-
-# NumPy — pulled in by ultralytics; pinned to avoid ABI mismatches
-numpy>=1.24.0,<2.0.0
-
-# =============================================================================
-# NOT listed here (must be installed separately — see README.md):
-#   torch          → NVIDIA Jetson wheel (JetPack-specific build)
-#   torchvision    → NVIDIA Jetson wheel
-#   opencv-python  → system package  (sudo apt install python3-opencv)
-# =============================================================================

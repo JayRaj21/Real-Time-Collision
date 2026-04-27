@@ -1,3 +1,6 @@
+# Virtual environment
+venv/
+
 # Model weights — downloaded automatically on first run
 *.pt
 *.engine
